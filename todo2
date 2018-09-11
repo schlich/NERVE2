@@ -1,0 +1,6 @@
+move rand of target and cursor before opengl call
+	rand to xlim and ylim /
+exclude collision check for first frame 
+initialize t1(tFlip) even for first frame /tStart = tFlip
+error: randomization of initcursor outside limits, so bound resets limits to w/in window.
+this can cause collisionFlag at end --> correct=1 and error w/ t1(tFlip) not initialized /

@@ -27,11 +27,18 @@ function DoTrial(app, targetType)
     % collision function
 
 %% Initial stuff
-global dat;
+global dat AGL GL GLU;
+gx = 0; gy = 0;
+white = WhiteIndex(app.win2);
+InitializeMatlabOpenGL();
 targetRad = app.TargetSizeEditField.Value;
 cursorRad = app.CursorSizeEditField.Value;
+gazeRad = app.GazeSizeEditField.Value;
 effTargetRad=0.1*targetRad;
 effCursorRad=0.1*cursorRad;
+effGazeRad=7*gazeRad;
+mouseInsteadOfGaze = app.SimulationCheckBox.Value;
+
 if nargin < 2
     targetType = 'sphere';
 end
@@ -73,7 +80,30 @@ end
 xLimNorm = 3; % 3.3
 yLimNorm = 1.75; % 2
 
-InitializeMatlabOpenGL();
+createFile = 0;
+edfFile=app.EyelinkEDFEditField.Value;
+
+try
+if app.EyelinkCheckBox.Value
+    eye_used = -1;
+    if (Eyelink('Initialize') ~= 0)
+        error('could not initialize connection to Eyelink')
+    end
+    el = EyelinkInitDefaults(app.win);
+    status = Eyelink('command','link_sample_data = LEFT,RIGHT,GAZE,AREA,GAZERES,HREF,PUPIL,STATUS,INPUT');
+    if status ~= 0
+        error('openfile error, status: ',status)
+    end
+    status = Eyelink('startrecording');
+    if status ~= 0
+        error('startrecording error, status: ',status)
+    end
+    WaitSecs(0.1);
+    status = Eyelink('message','SYNCTIME');
+    if status ~=0
+        error('message error, status: ',status)
+    end
+end
 enableDepth = 1; % Enable OpenGL depth testing
 
 %% Default colors
@@ -85,6 +115,7 @@ enableDepth = 1; % Enable OpenGL depth testing
 	ringColor					= [0.0,	0.8,	0.8,	1]; %cyan
 	ringWrongColor				= [1.0,	0.0,	0.0,	1]; %red
 	ringCorrectColor			= [0.7,	1.0,	0.2,	1]; %green
+    gazeColor                   = [0,   0,      0       1]; %white?
 %     red = [158,78,43,256]/256;
     blueVec = [64,49,82,256]/256;
     blue = num2cell(blueVec);
@@ -121,6 +152,7 @@ resetFrame = 0; % Counts number of frames from reset to last frame.
 joyRecord = []; % raw joystick
 dispRecord = []; % joystick converted to displacement
 curPosRecord = []; % norm cursor position
+gazeRecord = [];
 %targetPos = []; % norm target position if not center-out
 
 cursorMat = eye(4); % Initialize cursor position matrix
@@ -243,7 +275,7 @@ while ~endTrial
     if firstFrame
         randCursor = 1;
         %glTranslatef(rand*4-2, rand*4-2, 0);
-        %this loop ensures cursor is not placed initialized same as target
+        %while loop ensures cursor is not placed initialized same as target
         while randCursor
             preCursor = [transXcurs, transYcurs];
             %glTranslatef(rand*4-2, rand*4-2, 0); % Randomize cursor position
@@ -272,6 +304,7 @@ while ~endTrial
 
     
     Screen('EndOpenGL', app.win); % Finish OpenGL rendering into PTB window
+    Screen('DrawingFinished',app.win)
     %%
     Screen('BeginOpenGL', app.win2);
     
@@ -356,9 +389,43 @@ while ~endTrial
     glutSolidSphere(effCursorRad, 100, 100); % Draw cursor
     %mOld=reshape(glGetFloatv(GL.MODELVIEW_MATRIX),4,4);
     %glMatrixTranslatefEXT(GL.MODELVIEW,v(1), v(2), 0);
-
     
     Screen('EndOpenGL', app.win2); % Finish OpenGL rendering into PTB window
+    %% Gaze
+    if app.EyelinkCheckBox.Value
+        err = Eyelink('checkrecording');
+        if err~=0
+            error('checkrecording problem, status: ',err)
+        end
+        status = Eyelink('newfloatsampleavailable');
+        if status>0
+            if eye_used ~= -1
+                evt = Eyelink('newestfloatsample');
+                gx = evt.gx(eye_used+1);
+                gy = evt.gy(eye_used+1);
+                if (gx ~= el.MISSING_DATA && gy ~= el.MISSING_DATA && evt.pa(eye_used+1)>0 || mouseInsteadOfGaze)
+                    if app.SimulationCheckBox.Value
+                        [gx,gy] = GetMouse();
+                    end
+                    gazeRect = [gx-effGazeRad/2 gy-effGazeRad/2 gx+effGazeRad/2 gy+effGazeRad/2];
+                    penSize=6;
+                    Screen('FrameOval',app.win2,white,gazeRect,penSize,penSize);
+                end
+            else
+               eye_used = Eyelink('eyeavailable');
+               if eye_used==el.BINOCULAR
+                    eye_used = el.RIGHT_EYE;
+               elseif eye_used==-1
+                   error('eyeavailble returned -1')
+               end
+            end
+        else
+            fprintf('no sample avail, status: %d\n',status)
+        end
+    end
+    
+    Screen('DrawingFinished',app.win2);
+    
     %%
     tFlip = Screen('Flip', app.win,[],[],[],1); % Show rendered image at next vertical retrace
     if firstFrame
@@ -377,6 +444,7 @@ while ~endTrial
     cury = bound(cury, -yLimNorm, yLimNorm);
     cursorMat(1, 4) = curx; cursorMat(2, 4) = cury;
     curPosRecord(end+1,:) = [curx, cury];
+    gazeRecord(end+1,:) = [gx,gy];
     
     % Collision check
     if ~resetTrial
@@ -394,13 +462,15 @@ while ~endTrial
     if resetFrame == resetFrameNum
         endTrial = 1;
     end
+    
 % Halt in the middle of trial.
     pause(0.0001);
     if ~app.loopTask
         return;
     end
 end
-tClear = Screen('Flip', app.win); % Clear screen for next trial
+tClear = Screen('Flip', app.win,[],[],[],1); % Clear screen for next trial
+WaitSecs(0.1)
 
 % Record data
 
@@ -413,7 +483,41 @@ dat(sx+1).correct = correct;
 dat(sx+1).joyRecord = joyRecord;
 dat(sx+1).dispRecord = dispRecord;
 dat(sx+1).curPosRecord = curPosRecord;
+dat(sx+1).gazeRecord = gazeRecord;
 dat(sx+1).targetPos = [tx, ty];
 dat(sx+1).trialNum = app.trialNum;
 app.trialNum = app.trialNum + 1;
+% cleanup(createFile,edfFile)
 
+catch
+    if app.EyelinkCheckBox.Value
+        cleanup(createFile, edfFile)
+    end
+    Screen('CloseAll')
+    ShowCursor;
+    ers=lasterror;
+    ers.stack.file
+    ers.stack.name
+    ers.stack.line
+    rethrow(lasterror)
+end
+function cleanup(createFile, edfFile)
+    Eyelink('stoprecording');
+    if createFile
+        status=Eyelink('closefile');
+        if status ~=0
+            fprintf('closefile error, status: %d\n',status)
+        end
+        status=Eyelink('ReceiveFile',edfFile,pwd,1);
+        if status~=0
+            fprintf('problem: ReceiveFile status: %d\n', status);
+        end
+        if 2==exist(edfFile,'file')
+            fprintf('Data file "%s" can be found in :%s"\n',edfFile,pwd )
+        else
+            disp('unknown where data file went')
+        end
+    end
+    Eyelink('shutdown')
+end
+end

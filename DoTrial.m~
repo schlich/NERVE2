@@ -1,4 +1,4 @@
-function DoTrial(app, targetType)
+function DoTrial(app)
 %DoTrial Center-out or random target task
 % Simple center-out task
 % Target appears at the center of the screen (0,0). Starting cursor
@@ -38,10 +38,11 @@ effTargetRad=0.1*targetRad;
 effCursorRad=0.1*cursorRad;
 effGazeRad=7*gazeRad;
 mouseInsteadOfGaze = app.SimulationCheckBox.Value;
-
-if nargin < 2
-    targetType = 'sphere';
-end
+targetType = 'sphere';
+app.trialNum = 1;
+app.TrialNumEditField.Value = app.trialNum;
+app.loopTask = 1;
+while app.loopTask
 
 
 %velGain = 1; % This is the gain for cursor velocity that will appear and can 
@@ -72,9 +73,9 @@ velEffective = velGain * velGainCorrection;
 
 % For human debugging/testing setup (in the main lab computers)
 debugTest = 0;
-if app.TestingLogitechCheckBox.Value
-    debugTest = 1;
-end
+% if app.TestingLogitechCheckBox.Value
+%     debugTest = 1;
+% end
 
 % Cursor limits (in normalized coordinates)
 xLimNorm = 3; % 3.3
@@ -505,6 +506,7 @@ catch
     ers.stack.line
     rethrow(lasterror)
 end
+
 d = datestr(now);
 save(d,'dat');
 function cleanup(createFile, edfFile)

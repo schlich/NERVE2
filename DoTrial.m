@@ -1,4 +1,4 @@
-function DoTrial(app, targetType)
+function DoTrial(app)
 %DoTrial Center-out or random target task
 % Simple center-out task
 % Target appears at the center of the screen (0,0). Starting cursor
@@ -38,10 +38,11 @@ effTargetRad=0.1*targetRad;
 effCursorRad=0.1*cursorRad;
 effGazeRad=7*gazeRad;
 mouseInsteadOfGaze = app.SimulationCheckBox.Value;
-
-if nargin < 2
-    targetType = 'sphere';
-end
+targetType = 'sphere';
+app.trialNum = 1;
+app.TrialNumEditField.Value = app.trialNum;
+app.loopTask = 1;
+while app.loopTask
 
 
 %velGain = 1; % This is the gain for cursor velocity that will appear and can 
@@ -505,8 +506,18 @@ catch
     ers.stack.line
     rethrow(lasterror)
 end
+
 d = datestr(now);
 save(d,'dat');
+
+if app.ITIEditField.Value == 0
+    pause(0.01); % pause task to give time to interrupt with stop
+else
+    pause(app.ITIEditField.Value);
+end
+app.TrialNumEditField.Value = app.trialNum;
+end
+end
 function cleanup(createFile, edfFile)
     Eyelink('stoprecording');
     if createFile
@@ -525,5 +536,4 @@ function cleanup(createFile, edfFile)
         end
     end
     Eyelink('shutdown')
-end
 end

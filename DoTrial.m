@@ -72,9 +72,9 @@ velEffective = velGain * velGainCorrection;
 
 % For human debugging/testing setup (in the main lab computers)
 debugTest = 0;
-if app.TestingLogitechCheckBox.Value
-    debugTest = 1;
-end
+% if app.TestingLogitechCheckBox.Value
+%     debugTest = 1;
+% end
 
 % Cursor limits (in normalized coordinates)
 xLimNorm = 3; % 3.3
